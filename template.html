@@ -54,6 +54,9 @@
   .cmd { color: var(--dim); margin-bottom: 6px; }
   .cmd .prompt { color: var(--clay); }
   .cmd .flag { color: var(--blue); }
+  #coverage { font-size: 15px; font-weight: 500; color: var(--term-fg); margin: 8px 0 2px; }
+  #coverage .rng { color: var(--clay); }
+  #coverage .gen { font-size: 12px; font-weight: 400; color: var(--dim); margin-left: 12px; }
   #meta-line { color: var(--subtle); font-size: 11px; }
 
   /* ——— pages ——— */
@@ -189,6 +192,7 @@
   <div class="term-body">
 
     <div class="cmd"><span class="prompt">&gt;</span> repo-digest <span id="cmd-flags"></span></div>
+    <div id="coverage"></div>
     <div id="meta-line">loading…</div>
 
     <!-- ================= PAGE 1 — EXECUTIVE ================= -->
@@ -318,6 +322,7 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const md = iso => { if(!iso) return '—'; const [,mo,da]=iso.split('-'); return `${MON[+mo-1]} ${+da}`; };
+  const pretty = iso => { if(!iso) return ''; const [y,mo,da]=iso.split('-'); return `${MON[+mo-1]} ${+da}, ${y}`; };
 
   const MOM = {
     accelerating:{sym:'▲', label:'Accelerating'},
@@ -342,7 +347,10 @@
 
   // ——— header ———
   $('cmd-flags').innerHTML = `<span class="flag">--window</span> ${esc(w.label)}`;
-  $('meta-line').textContent = `${w.from} → ${w.to} · prior ${w.prior_from} → ${w.prior_to} · ${DATA.root||''}`;
+  $('coverage').innerHTML =
+    `<span class="rng">${pretty(w.from)} → ${pretty(w.to)}</span>` +
+    `<span class="gen">generated ${pretty((DATA.generated_at||'').slice(0,10))}</span>`;
+  $('meta-line').textContent = `prior window ${w.prior_from} → ${w.prior_to} · ${DATA.root||''}`;
   $('foot-gen').textContent = `generated ${(DATA.generated_at||'').slice(0,16).replace('T',' ')}`;
   $('foot-stats').textContent = `${o.active_repos} active repos · ${o.commits} commits · ${o.shipped.tags} shipped`;
 

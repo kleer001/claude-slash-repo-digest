@@ -45,11 +45,13 @@ never call GitHub or any network service.
      inline from `by_repo`.
    - Collect the result for each repo, keyed by repo name.
 
-4. **Copy the template** to the output path in the current working directory, naming it by window:
+4. **Copy the template** to the output path in the current working directory, date-stamping the
+   filename with the window's start and end (`window.from`, `window.to` from the JSON):
    ```sh
-   cp <skill-dir>/template.html ./repo-digest-<LABEL>.html
+   cp <skill-dir>/template.html ./repo-digest_<FROM>_to_<TO>.html
    ```
-   `<LABEL>` is `window.label` from the JSON (e.g. `last30d`, `2026-05`).
+   e.g. `repo-digest_2026-05-02_to_2026-06-01.html`. The page header renders the same coverage
+   dates (and the generated date) automatically from the data — you don't write them.
 
 5. **Edit the output file** (use Edit, not Write — preserve the template's JS/CSS). Fill five slots:
 
