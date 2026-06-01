@@ -9,19 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ivory: #FAF9F5;
-    --term-bg: #1a1918;
-    --term-fg: #d1cfc5;
-    --titlebar: #252321;
-    --outline: rgba(255,255,255,0.08);
-    --hover: rgba(255,255,255,0.035);
-    --clay: #D97757;
-    --dim: rgb(136,136,136);
-    --subtle: rgb(80,80,80);
-    --green: rgb(78,186,101);
-    --red: rgb(255,107,128);
-    --blue: rgb(177,185,249);
-    --yellow: rgb(255,193,7);
+    /* light theme — ivory page, near-white report surface, clay accent */
+    --ivory: #EFEDE6;
+    --term-bg: #FBFAF7;
+    --term-fg: #2A2825;
+    --titlebar: #E7E4DC;
+    --outline: rgba(0,0,0,0.12);
+    --hover: rgba(0,0,0,0.035);
+    --clay: #C2562F;
+    --dim: rgb(108,104,98);
+    --subtle: rgb(168,162,152);
+    --green: rgb(40,148,72);
+    --red: rgb(196,58,78);
+    --blue: rgb(78,88,188);
+    --yellow: rgb(170,120,8);
     --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Monaco, monospace;
   }
   * { box-sizing: border-box; }
@@ -37,7 +38,7 @@
     background: var(--term-bg);
     border-radius: 8px;
     outline: 1px solid var(--outline);
-    box-shadow: 0 20px 60px rgba(20,20,19,0.22);
+    box-shadow: 0 16px 50px rgba(20,20,19,0.10);
   }
   .titlebar {
     background: var(--titlebar);
@@ -46,7 +47,7 @@
     padding: 11px 14px;
     display: flex; align-items: center; gap: 7px;
   }
-  .titlebar .dot { width: 11px; height: 11px; border-radius: 50%; background: #3a3836; }
+  .titlebar .dot { width: 11px; height: 11px; border-radius: 50%; background: #cbc6bb; }
   .titlebar .path { margin-left: 14px; color: var(--dim); font-size: 11px; }
   .term-body { padding: 22px 30px 30px; }
 
@@ -143,7 +144,7 @@
   .scroll { max-height: 520px; overflow: auto; border-top: 1px solid var(--outline); border-bottom: 1px solid var(--outline); }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th, td { text-align: left; padding: 6px 10px; }
-  td { border-top: 1px solid rgba(255,255,255,0.04); }
+  td { border-top: 1px solid rgba(0,0,0,0.07); }
   th { position: sticky; top: 0; background: var(--term-bg); z-index: 1;
        font-weight: 500; font-size: 11px; color: var(--subtle);
        cursor: pointer; user-select: none; border-bottom: 1px solid var(--outline); }
