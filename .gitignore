@@ -1,0 +1,10 @@
+# Generated digests
+repo-digest-*.html
+
+# Node
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.claude/settings.local.json

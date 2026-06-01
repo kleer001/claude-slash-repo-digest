@@ -1,0 +1,21 @@
+{
+  "name": "repo-digest",
+  "owner": {
+    "name": "kleer001"
+  },
+  "metadata": {
+    "description": "Monthly digest of your own git work across local repos, as a self-contained HTML report",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "repo-digest",
+      "description": "Digest your own commit activity across local repos — what moved, cooled, and shipped — read three ways (Executive, Grounded, Encouraging). Local git only.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./"
+      ]
+    }
+  ]
+}
