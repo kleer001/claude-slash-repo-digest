@@ -33,12 +33,19 @@ Saves a `repo-digest_<from>_to_<to>.html` next to you. Open it in a browser; it 
 - **Executive** — the narrative: what carried the month, what's new, what cooled, what shipped.
 - **Grounded** — the honest read: churn and rework up front, net lines-of-code deliberately demoted
   (generated and data files make it lie).
-- **Encouraging** — what you pulled off: shipped tags, streaks, busiest day, new projects — and
+- **Encouraging** — what you pulled off: shipped features, streaks, busiest day, new projects — and
   dormant repos reframed as "ready to revisit."
 
+The report leads with **shipped features**, not commit count. Raw commits are motion, not delivery
+(the same way lines-of-code is a ghost stat), so they're deliberately muted into small accents and a
+reference table. Features are inferred from local git only — git tags and releases, `feat:`
+conventional commits, feature-branch merges, and (softly) keyword-led subjects — each labeled by
+confidence, and always read as an approximation (`~N`). A repo with no commit conventions honestly
+reads zero features rather than a fabricated number.
+
 Per repo it tracks **momentum** (accelerating · revived · new · steady · cooling · cooled) against
-the prior window, plus churn, net lines, languages, shipped tags, and cadence — counting only *your*
-commits (matched on `git config user.email`, or `--author`).
+the prior window, plus shipped features, churn, net lines, languages, and cadence — counting only
+*your* commits (matched on `git config user.email`, or `--author`).
 
 ## License
 
