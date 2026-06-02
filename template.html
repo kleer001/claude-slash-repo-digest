@@ -65,14 +65,14 @@
               text-transform: uppercase; margin: 30px 0 2px; }
   .page:first-of-type .page-tag { margin-top: 14px; }
 
-  /* ——— hero ——— */
+  /* ——— hero — qualitative headline; delivery over raw counts ——— */
   #hero { margin: 12px 0 6px; }
-  #hero-total { font-size: 56px; font-weight: 700; line-height: 1; }
-  #hero-total .unit { color: var(--clay); }
-  #hero-total .label { font-size: 18px; font-weight: 400; color: var(--dim); margin-left: 8px; }
-  #hero-total .arrow { font-size: 30px; margin-left: 10px; }
-  #hero-split { color: var(--dim); margin-top: 10px; }
+  #hero-total { font-size: 34px; font-weight: 700; line-height: 1.15; }
+  #hero-total .unit { font-size: 21px; font-weight: 500; color: var(--clay); }
+  #hero-total .arrow { font-size: 22px; margin-left: 8px; }
+  #hero-split { color: var(--dim); margin-top: 8px; font-size: 12.5px; }
   #hero-split b { color: var(--term-fg); font-weight: 500; }
+  #hero-split .muted { color: var(--subtle); }
   #hero-split .up { color: var(--green); }
   #hero-split .down { color: var(--yellow); }
 
@@ -111,7 +111,7 @@
   .grid { display: grid; gap: 4px 28px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
   .stat { padding: 4px 0; }
   .stat .label { font-size: 11px; color: var(--dim); }
-  .stat .val { font-size: 22px; font-weight: 500; }
+  .stat .val { font-size: 18px; font-weight: 500; }
   .stat .detail { font-size: 11px; color: var(--subtle); }
 
   /* ——— repo cards (executive top movers) ——— */
@@ -119,9 +119,15 @@
   .card { border: 1px solid var(--outline); border-radius: 6px; padding: 11px 13px; }
   .card .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .card .nm { color: var(--term-fg); font-weight: 500; }
-  .card .sub { color: var(--subtle); font-size: 11px; margin: 3px 0 6px; }
-  .card .note { color: var(--dim); font-size: 12px; line-height: 1.55; }
+  .card .note { color: var(--term-fg); font-size: 13px; line-height: 1.6; margin: 6px 0 2px; }
+  .card .sub { color: var(--subtle); font-size: 11px; margin-top: 6px; }
   .card .ship { color: var(--green); font-size: 11px; }
+
+  /* ——— shipped-feature confidence badges (low signals recede) ——— */
+  .sig { font-size: 10px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; margin-left: 4px; white-space: nowrap; }
+  .sig-high { color: var(--green); }
+  .sig-medium { color: var(--dim); }
+  .sig-low { color: var(--subtle); }
 
   /* ——— callouts ——— */
   .callout { padding: 6px 0 6px 14px; border-left: 2px solid var(--subtle); color: var(--dim); margin: 6px 0; }
@@ -156,6 +162,7 @@
   th.sorted::after { content: ' ↓'; }
   th.sorted.asc::after { content: ' ↑'; }
   td.num, th.num { text-align: right; }
+  td.num { color: var(--dim); }                 /* figures recede; repo + momentum carry the row */
   tbody tr:hover td { background: var(--hover); }
 
   footer { margin-top: 28px; color: var(--subtle); font-size: 11px;
@@ -177,7 +184,7 @@
   @media (max-width: 760px) {
     body { padding: 20px 12px 48px; }
     .term-body { padding: 16px 16px 24px; }
-    #hero-total { font-size: 40px; }
+    #hero-total { font-size: 26px; }
     .bar { grid-template-columns: 14ch 1fr 6ch; gap: 8px; }
   }
 </style>
@@ -249,7 +256,7 @@
 
       <section>
         <div class="hr"></div>
-        <h2>all active repos<span class="hint">click a header to sort · default: rework</span></h2>
+        <h2>all active repos<span class="hint">reference table · click a header to sort</span></h2>
         <div class="section-body scroll"><table id="tbl-repos"></table></div>
       </section>
     </div>
@@ -276,7 +283,7 @@
 
       <section id="shipped-section">
         <div class="hr"></div>
-        <h2>shipped<span class="hint">tags &amp; releases this window</span></h2>
+        <h2>shipped features<span class="hint">tags, feat: commits &amp; feature merges — approx</span></h2>
         <div class="section-body" id="shipped"></div>
       </section>
 
@@ -338,6 +345,10 @@
 
   if (!DATA.overall) { $('meta-line').textContent = 'no data — embed JSON in #report-data.'; return; }
   const o = DATA.overall, w = DATA.window, R = DATA.by_repo||{};
+  // shipped-features fallback so older JSON blobs still render cleanly
+  const F = o.features || {count:0, prior_count:0, by_signal:{}, repos:[]};
+  const rf = r => r.features || {count:0, prior_count:0, by_signal:{}, items:[]};
+  const plural = (n,w) => `${w}${n===1?'':'s'}`;
 
   // repo notes written by the agent
   const noteOf = {};
@@ -352,20 +363,22 @@
     `<span class="gen">generated ${pretty((DATA.generated_at||'').slice(0,10))}</span>`;
   $('meta-line').textContent = `prior window ${w.prior_from} → ${w.prior_to} · ${DATA.root||''}`;
   $('foot-gen').textContent = `generated ${(DATA.generated_at||'').slice(0,16).replace('T',' ')}`;
-  $('foot-stats').textContent = `${o.active_repos} active repos · ${o.commits} commits · ${o.shipped.tags} shipped`;
+  $('foot-stats').textContent = `${o.active_repos} active repos · ~${F.count} features · ${o.commits} commits`;
 
-  // ——— hero ———
-  const dc = o.commits - o.prior_commits;
-  const arrow = dc>0 ? `<span class="arrow up">▲</span>` : dc<0 ? `<span class="arrow down">▼</span>` : '';
-  $('hero-total').innerHTML = `${o.commits}${arrow}<span class="label">commits</span>`;
-  const dpct = o.prior_commits>0 ? Math.round(100*dc/o.prior_commits) : null;
-  const trendCls = dc>=0?'up':'down';
+  // ——— hero — lead with delivery (features), keep raw counts muted ———
+  const df = F.count - F.prior_count;
+  const arrow = df>0 ? `<span class="arrow up">▲</span>` : df<0 ? `<span class="arrow down">▼</span>` : '';
+  $('hero-total').innerHTML = `~${F.count}<span class="unit"> ${plural(F.count,'feature')} shipped</span>${arrow}`;
+  const ftrend = F.prior_count>0
+    ? ` <span class="${df>=0?'up':'down'}">${signed(df)} vs ${F.prior_count} prior</span>` : '';
+  const mom = [];
+  if (o.new_repos) mom.push(`<b>${o.new_repos}</b> new`);
+  if (o.revived_repos) mom.push(`<b>${o.revived_repos}</b> revived`);
+  if (o.cooled_repos) mom.push(`<b>${o.cooled_repos}</b> cooled`);
   $('hero-split').innerHTML =
-    `<b>${o.active_repos}</b> active repos · ` +
-    `<span class="${trendCls}">${signed(dc)}${dpct!==null?` (${dpct>=0?'+':''}${dpct}%)`:''}</span> vs prior <b>${o.prior_commits}</b> · ` +
-    `net <b>${signed(o.lines.net)}</b> lines · ` +
-    `<b>${o.new_repos}</b> new · <b>${o.revived_repos}</b> revived · <b>${o.cooled_repos}</b> cooled · ` +
-    `<b>${o.shipped.tags}</b> shipped`;
+    `across <b>${o.active_repos}</b> active ${plural(o.active_repos,'repo')}${ftrend} · ` +
+    `<span class="muted">${o.commits} commits this window</span>` +
+    (mom.length ? ` · ${mom.join(' · ')}` : '');
 
   // ——— momentum spine ———
   const groups = {};
@@ -378,12 +391,14 @@
 
   // ——— top movers (executive cards) ———
   $('cards').innerHTML = (DATA.top_repos||[]).slice(0,5).map(name => {
-    const r = R[name];
+    const r = R[name], f = rf(r);
     const ship = r.shipped.length ? `<span class="ship">⚑ ${r.shipped.map(s=>esc(s.tag)).join(', ')}</span>` : '';
-    const note = noteOf[name] ? esc(noteOf[name]) : '';
+    const note = noteOf[name] ? `<div class="note">${esc(noteOf[name])}</div>` : '';
+    // figures recede to a muted footer: features + momentum, rework only when notable
+    const rework = r.churn.rework_lines > 0 ? ` · rework≈${fmt(r.churn.rework_lines)}` : '';
     return `<div class="card"><div class="hd"><span class="nm">${esc(name)}</span>${badge(r.momentum)}</div>` +
-      `<div class="sub">${r.commits} commits (prior ${r.prior_commits}) · net ${signed(r.lines.net)} · rework≈${fmt(r.churn.rework_lines)} ${ship}</div>` +
-      (note?`<div class="note">${note}</div>`:'') + `</div>`;
+      note +
+      `<div class="sub">~${f.count} ${plural(f.count,'feature')}${rework} ${ship}</div></div>`;
   }).join('');
 
   // ——— rework callout (grounded) ———
@@ -415,6 +430,7 @@
   const repoRows = Object.entries(R).map(([name,r]) => [
     cell(name),
     cell(MOM_ORDER.indexOf(r.momentum), badge(r.momentum)),
+    cell(rf(r).count, rf(r).count?`~${rf(r).count}`:'—'),
     cell(r.commits, `${r.commits} <span style="color:var(--subtle)">/ ${r.prior_commits}</span>`),
     cell(r.lines.net, signed(r.lines.net)),
     cell(r.churn.rework_lines, fmt(r.churn.rework_lines)),
@@ -422,27 +438,29 @@
     cell(topLangs(r.languages)),
   ]);
   table($('tbl-repos'), [
-    {h:'repo'}, {h:'momentum'}, {h:'commits / prior', num:1},
-    {h:'net loc', num:1}, {h:'rework', num:1, sort:1}, {h:'shipped', num:1}, {h:'langs'},
+    {h:'repo'}, {h:'momentum'}, {h:'features', num:1, sort:1}, {h:'commits / prior', num:1},
+    {h:'net loc', num:1}, {h:'rework', num:1}, {h:'tags', num:1}, {h:'langs'},
   ], repoRows);
 
   // ——— encouraging stat grid ———
   $('enc-grid').innerHTML = [
-    ['commits', o.commits],
-    ['active days', o.cadence.active_days],
+    ['features shipped', `~${F.count}`, F.prior_count ? `prior ${F.prior_count}` : 'roughly'],
     ['longest streak', o.cadence.longest_streak, 'days in a row'],
-    ['busiest day', o.cadence.busiest_day.commits, md(o.cadence.busiest_day.date)],
-    ['repos shipped', o.shipped.repos.length],
+    ['busiest day', md(o.cadence.busiest_day.date), `${o.cadence.busiest_day.commits} commits`],
     ['new projects', o.new_repos],
   ].map(([l,v,d]) =>
     `<div class="stat"><div class="label">${l}</div><div class="val">${v}</div>` +
     (d?`<div class="detail">${esc(d)}</div>`:'')+`</div>`).join('');
 
-  // ——— shipped list ———
-  const shippedRepos = Object.entries(R).filter(([,r])=>r.shipped.length);
-  if (!shippedRepos.length) { $('shipped-section').style.display='none'; }
-  else $('shipped').innerHTML = shippedRepos.map(([name,r]) =>
-    `<div class="callout"><b>${esc(name)}</b> — ${r.shipped.map(s=>`<code>${esc(s.tag)}</code> (${md(s.date)})`).join(', ')}</div>`).join('');
+  // ——— shipped features (tags, feat: commits, feature merges) ———
+  const shipRepos = Object.entries(R).filter(([,r])=>rf(r).items.length);
+  if (!shipRepos.length) { $('shipped-section').style.display='none'; }
+  else $('shipped').innerHTML = shipRepos.map(([name,r]) =>
+    `<div class="callout"><b>${esc(name)}</b> — ${rf(r).items.map(it =>
+      it.kind==='tag'
+        ? `<code>${esc(it.tag)}</code> <span class="sig sig-high">release</span>`
+        : `${esc(it.subject)} <span class="sig sig-${esc(it.confidence)}">${esc(it.signal)}</span>`
+    ).join(', ')}</div>`).join('');
 
   // ——— ready to revisit (cooled) ———
   const cooled = Object.entries(R).filter(([,r])=>r.momentum==='cooled')
@@ -459,7 +477,6 @@
     $('daystrip').innerHTML = days.map(d => {
       const h = Math.round(60*d.commits/max);
       return `<div class="dcol" title="${d.date} · ${d.commits} commits · ${d.repos.length} repos">` +
-        `<div class="dn">${d.commits}</div>` +
         `<div class="bar2" style="height:${Math.max(2,h)}px"></div>` +
         `<div class="dd">${d.date.slice(8)}</div></div>`;
     }).join('');

@@ -1,6 +1,6 @@
 ---
 name: repo-digest
-description: Generate a self-contained HTML digest of your own git work across local repos — what moved, what cooled, what shipped — read three ways (Executive, Grounded, Encouraging). Local git only, no network. Default window is the last 30 days; pass a calendar month or day count to change it.
+description: Generate a self-contained HTML digest of your own git work across local repos — what moved, what cooled, what shipped (features, not just commits) — read three ways (Executive, Grounded, Encouraging). Local git only, no network. Default window is the last 30 days; pass a calendar month or day count to change it.
 ---
 
 # Repo Digest
@@ -38,9 +38,10 @@ never call GitHub or any network service.
      subjects, bodies, and per-commit line counts). The subagent must **not** run git.
      Prompt each with:
      > Here is one window of your own commits for repo **<name>** as JSON. Return 2–3 plain
-     > sentences: what changed, whether anything shipped, and one honest note — call out churn
-     > if `churn.rework_lines` is high relative to `lines.net`. No markup, no preamble, no repo
-     > name prefix. Just the sentences.
+     > sentences: what changed, what shipped (name concrete features from `features.items`, framed
+     > as "~N"; tags are releases), and one honest note — call out churn if `churn.rework_lines`
+     > is high relative to `lines.net`, or lots of commits but few features. No markup, no
+     > preamble, no repo name prefix. Just the sentences.
    - **If `active_repos ≤ 8`:** skip the fan-out and write the per-repo sentences yourself
      inline from `by_repo`.
    - Collect the result for each repo, keyed by repo name.
@@ -68,19 +69,25 @@ never call GitHub or any network service.
 
    - **`<!-- AGENT: executive -->`** — Dana, a grounded CTO. 3–4 sentences, highest altitude.
      The *narrative* of the window: what carried the momentum, what's new, what cooled, what
-     shipped. No per-repo dumping (the spine and cards below already list repos). Wrap key
+     shipped. Lean on **`features.count` and tags as the delivery signal** rather than raw
+     commit count (commits are motion, not delivery) — but hedge it ("roughly N features").
+     No per-repo dumping (the spine and cards below already list repos). Wrap key
      subjects in `<b>`, secondary emphasis in `<em>`. Markup: `<div class="prose">…</div>`.
 
    - **`<!-- AGENT: grounded -->`** — Sam, a senior dev who's seen some serious shit. Honest,
      no vanity metrics. Lead with **rework/churn** — name the repos and files where the thrash
-     lives (from `churn.hot_files`). Treat net LOC skeptically (data/generated files inflate it;
-     say so if a repo's net is huge but rework is tiny). Mention cooled repos neutrally as "no
-     commits this window," not as failure. No streaks, no cheerleading. `<div class="prose">…</div>`.
+     lives (from `churn.hot_files`). Treat net LOC **and `features.count`** skeptically: features
+     are inferred from commit messages, so if `features.by_signal` is mostly `keyword` say the
+     feature read is soft, and call out any repo with a high commit count but near-zero features
+     (motion, not delivery). Treat net LOC the same (data/generated files inflate it; say so if a
+     repo's net is huge but rework is tiny). Mention cooled repos neutrally as "no commits this
+     window," not as failure. No streaks, no cheerleading. `<div class="prose">…</div>`.
 
    - **`<!-- AGENT: encouraging -->`** — Jordan, an early-career dev who celebrates progress.
-     Warm and specific: shipped count, longest streak, busiest day, new projects started. Frame
-     cooled repos as "ready to revisit," never as guilt. Name real wins from the data.
-     `<div class="prose">…</div>`.
+     Warm and specific: features shipped (frame as "around N"), longest streak, busiest day, new
+     projects started. The stat grid is intentionally sparse now, so the warmth lives in your
+     words — name real `feat:`/tag wins from `features.items`. Frame cooled repos as "ready to
+     revisit," never as guilt. `<div class="prose">…</div>`.
 
    Do not restructure sections or edit anything outside the five slots.
 
@@ -97,5 +104,15 @@ never call GitHub or any network service.
   (the stale list). `new` = first-ever commit by this author landed in the window.
 - `churn.rework_lines` is a **heuristic estimate** (per hot file, `min(added, deleted)`), not
   exact add-then-delete tracking — phrase it as "rework" / "≈", never as a precise count.
+- `features.count` is a **heuristic estimate** of shipped capabilities, layered from git tags
+  (high confidence), `feat:` conventional commits (high), feature-branch merges (medium), and
+  keyword-led subjects like "add/implement/introduce" (low). It is noisy and convention-dependent —
+  always phrase it as "~N features" / "roughly", never an exact count. A repo with no commit
+  conventions reads **0 features** even while active; that is honest absence, not failure. Use
+  `features.by_signal` to gauge confidence (mostly `keyword` = a soft read).
+- The page is **prose-first by design**: raw figures (commits, net LOC) are deliberately muted
+  into small accents and a reference table, so commit count no longer headlines. State the numbers
+  that *matter* in your prose — don't assume the reader sees a big figure — while never dumping
+  lists of numbers.
 - Keep each persona's prose tight enough that its page stays on one printed page. Terse and
   specific beats long.

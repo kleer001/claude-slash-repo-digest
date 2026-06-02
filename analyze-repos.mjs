@@ -50,6 +50,27 @@ const DAYS = parseInt(flag('--days', '30'), 10)
 const COMMITS_LOG_CAP = 60 // most-recent window commits kept as prose fuel per repo
 const BODY_CAP = 400 // chars of commit body kept
 const EPS = 2 // commit count treated as "≈ none" for momentum classification
+const FEATURES_CAP = 40 // most-recent window features kept per repo
+
+// ---------------------------------------------------------------------------
+// Shipped-features heuristic — layered local-git signals, honest confidence.
+// A "feature" is a delivered capability, not a commit. Detection is noisy and
+// convention-dependent, so every item carries a signal + confidence tier and the
+// count is always rendered as "~N". A repo with no conventions reads 0 — that is
+// honest absence, not failure.
+// ---------------------------------------------------------------------------
+// Tier "conventional" (high): "feat:", "feat(api):", "feat!:", "feat(ui)!:"
+const RE_CONVENTIONAL_FEAT = /^feat(\([^)]*\))?!?:\s*(.+)$/i
+// Tier "merge" (medium): a merge that lands a feature branch / PR…
+const RE_MERGE_FEATURE = /^Merge (pull request|branch '(feat|feature|feat-)[^']*')/i
+// …but NOT a routine back-merge of an integration branch into the current one.
+const RE_MERGE_BACKMERGE = /^Merge (branch '(main|master|develop|dev)'|remote-tracking branch|branch '[^']+' of )/i
+// Tier "keyword" (low): a verb of delivery STARTS the subject.
+const RE_KEYWORD_FEAT =
+  /^(add(?:s|ed|ing)?|implement(?:s|ed|ing)?|introduce[sd]?|support(?:s|ed|ing)?|enable[sd]?|launch(?:e[sd]|ing)?|ship(?:s|ped|ping)?|release[sd]?)\b/i
+// Disqualifier — checked against the RAW subject first; routine work never counts.
+const RE_NONFEATURE =
+  /^(chore|fix|bug|docs?|tests?|refactor|style|ci|build|perf|revert|wip|bump|deps?|typo|format|lint|rename|move|cleanup|remove|delete|update readme)\b/i
 
 const GLOBAL_EMAIL = (() => {
   try {
@@ -177,6 +198,27 @@ function streak(sortedDays) {
   return best
 }
 
+// Classify one commit as a shipped feature (or not). Highest-confidence tier wins;
+// a commit yields at most one feature. Returns { signal, confidence, label } or null.
+function classifyFeature(c) {
+  const subj = (c.subject || '').trim()
+  if (!subj) return null
+  // Merge commits judged by parent count, independent of the non-feature filter.
+  if (c.parents && c.parents.length >= 2) {
+    if (RE_MERGE_BACKMERGE.test(subj)) return null
+    if (RE_MERGE_FEATURE.test(subj)) {
+      const label = subj.replace(/^Merge (branch '|pull request )/i, '').replace(/'.*$/, '')
+      return { signal: 'merge', confidence: 'medium', label }
+    }
+    return null // octopus / unknown merge — don't guess
+  }
+  if (RE_NONFEATURE.test(subj)) return null
+  const fm = RE_CONVENTIONAL_FEAT.exec(subj)
+  if (fm) return { signal: 'conventional', confidence: 'high', label: fm[2].trim() }
+  if (RE_KEYWORD_FEAT.test(subj)) return { signal: 'keyword', confidence: 'low', label: subj }
+  return null
+}
+
 function analyzeRepo(repo, sink) {
   const author = repoAuthor(repo)
   const authorArgs = author ? ['--author=' + author] : []
@@ -192,7 +234,7 @@ function analyzeRepo(repo, sink) {
     'log',
     ...range,
     '--date=iso-strict',
-    '--pretty=format:%H%x1f%aI%x1f%ae%x1f%s%x1f%b%x1e',
+    '--pretty=format:%H%x1f%aI%x1f%ae%x1f%s%x1f%P%x1f%b%x1e',
   ])
   if (!metaRaw || !metaRaw.trim()) return null // no activity in either window
 
@@ -204,10 +246,11 @@ function analyzeRepo(repo, sink) {
     const hash = parts[0]
     const date = parts[1]
     const subject = parts[3] || ''
-    const body = parts.slice(4).join('\x1f') || ''
+    const parents = (parts[4] || '').trim().split(/\s+/).filter(Boolean)
+    const body = parts.slice(5).join('\x1f') || ''
     const t = Date.parse(date)
     if (!hash || isNaN(t)) continue
-    commits[hash] = { hash, date, subject, body, t, files: 0, add: 0, del: 0, paths: [] }
+    commits[hash] = { hash, date, subject, body, t, parents, files: 0, add: 0, del: 0, paths: [] }
   }
 
   // numstat pass over the same range
@@ -234,9 +277,13 @@ function analyzeRepo(repo, sink) {
   // split into window vs prior
   const win = []
   let prior = 0
+  let priorFeatureCount = 0 // prior-window commit-features, for the features trend
   for (const c of Object.values(commits)) {
     if (c.t >= FROM_T && c.t < TO_T) win.push(c)
-    else if (c.t >= W.prior_from.getTime() && c.t < FROM_T) prior++
+    else if (c.t >= W.prior_from.getTime() && c.t < FROM_T) {
+      prior++
+      if (classifyFeature(c)) priorFeatureCount++
+    }
   }
   const n = win.length
   const p = prior
@@ -288,20 +335,63 @@ function analyzeRepo(repo, sink) {
   let busiest = { date: null, commits: 0 }
   for (const d of days) if (dayCount[d] > busiest.commits) busiest = { date: d, commits: dayCount[d] }
 
-  // shipped: tags whose creation date falls in the window
+  // shipped: tags whose creation date falls in the window.
+  // We also collect the commit each tag points to (its tip) so a release tag and
+  // its tip commit don't double-count as two features, and tally prior-window tags
+  // for the features trend. `*objectname` is the dereferenced commit for annotated
+  // tags; for lightweight tags it's empty and `objectname` is already the commit.
   const shipped = []
+  const tagFeatures = [] // {kind:'tag', signal:'tag', confidence:'high', tag, date}
+  const taggedHashes = new Set()
+  let priorTagCount = 0
   const tagsRaw = git(repo, [
     'for-each-ref',
-    '--format=%(refname:short)%x1f%(creatordate:iso-strict)',
+    // for-each-ref does NOT interpret pretty-format hex escapes like %x1f (only
+    // `git log --pretty` does), so use a literal 0x1f byte as the field separator.
+    '--format=%(refname:short)\x1f%(creatordate:iso-strict)\x1f%(objectname)\x1f%(*objectname)',
     'refs/tags',
   ])
   if (tagsRaw) {
     for (const line of tagsRaw.split('\n')) {
       if (!line.trim()) continue
-      const [tag, cd] = line.split('\x1f')
+      const [tag, cd, obj, deref] = line.split('\x1f')
       const t = Date.parse(cd)
-      if (!isNaN(t) && t >= FROM_T && t < TO_T) shipped.push({ tag, date: (cd || '').slice(0, 10) })
+      if (isNaN(t)) continue
+      const tip = (deref && deref.trim()) || (obj && obj.trim())
+      if (t >= FROM_T && t < TO_T) {
+        const date = (cd || '').slice(0, 10)
+        shipped.push({ tag, date })
+        tagFeatures.push({ kind: 'tag', signal: 'tag', confidence: 'high', tag, date })
+        if (tip) taggedHashes.add(tip)
+      } else if (t >= W.prior_from.getTime() && t < FROM_T) {
+        priorTagCount++
+      }
     }
+  }
+
+  // shipped features: tags (above) + classified commits, deduped against tag tips.
+  const featureItems = tagFeatures.slice()
+  const by_signal = { tag: tagFeatures.length, conventional: 0, merge: 0, keyword: 0 }
+  for (const c of win) {
+    if (taggedHashes.has(c.hash)) continue // the tag already represents this delivery
+    const f = classifyFeature(c)
+    if (!f) continue
+    by_signal[f.signal]++
+    featureItems.push({
+      kind: 'commit',
+      signal: f.signal,
+      confidence: f.confidence,
+      subject: f.label,
+      hash: c.hash.slice(0, 9),
+      date: c.date.slice(0, 10),
+    })
+  }
+  featureItems.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  const features = {
+    count: featureItems.length,
+    prior_count: priorTagCount + priorFeatureCount,
+    by_signal,
+    items: featureItems.slice(0, FEATURES_CAP),
   }
 
   const commits_log = win
@@ -328,6 +418,7 @@ function analyzeRepo(repo, sink) {
     churn: { rework_lines: rework, hot_files },
     languages: langs,
     shipped,
+    features,
     cadence: {
       active_days: days.length,
       longest_streak: streak(days),
@@ -395,6 +486,17 @@ function main() {
       rework_lines: active.reduce((s, r) => s + r.churn.rework_lines, 0),
     },
     shipped: { tags: active.reduce((s, r) => s + r.shipped.length, 0), repos: shippedRepos },
+    features: {
+      count: active.reduce((s, r) => s + r.features.count, 0),
+      prior_count: repos.reduce((s, r) => s + r.features.prior_count, 0),
+      by_signal: {
+        tag: active.reduce((s, r) => s + r.features.by_signal.tag, 0),
+        conventional: active.reduce((s, r) => s + r.features.by_signal.conventional, 0),
+        merge: active.reduce((s, r) => s + r.features.by_signal.merge, 0),
+        keyword: active.reduce((s, r) => s + r.features.by_signal.keyword, 0),
+      },
+      repos: active.filter(r => r.features.count > 0).map(r => path.basename(r.path)),
+    },
     languages: langTotal,
     cadence: {
       active_days: sortedDays.length,
@@ -443,7 +545,8 @@ function printText(out) {
       `${o.new_repos} new · ${o.revived_repos} revived · ${o.cooled_repos} cooled`,
   )
   L(
-    `net ${o.lines.net >= 0 ? '+' : ''}${o.lines.net} lines (+${o.lines.added}/-${o.lines.removed}) · ` +
+    `features~${o.features.count} (prior ${o.features.prior_count}) · ` +
+      `net ${o.lines.net >= 0 ? '+' : ''}${o.lines.net} lines (+${o.lines.added}/-${o.lines.removed}) · ` +
       `rework≈${o.churn.rework_lines} · shipped ${o.shipped.tags} tags`,
   )
   L(
@@ -456,6 +559,7 @@ function printText(out) {
     L(
       `  ${name.padEnd(22)} ${String(r.momentum).padEnd(13)} ` +
         `${String(r.commits).padStart(4)}c (prior ${r.prior_commits}) ` +
+        `feat~${r.features.count} ` +
         `net ${r.lines.net >= 0 ? '+' : ''}${r.lines.net} ` +
         `rework≈${r.churn.rework_lines}` +
         (r.shipped.length ? `  ⚑${r.shipped.map(s => s.tag).join(',')}` : ''),
